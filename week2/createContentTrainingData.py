@@ -6,9 +6,15 @@ import os
 import random
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from nltk.stem import PorterStemmer
+
+ps = PorterStemmer()
 
 def transform_name(product_name):
-    # IMPLEMENT
+    product_name = ''.join(ch if ch.isalnum() else ' ' for ch in product_name)
+    product_name_tokens = product_name.split()
+    product_name_tokens = [ps.stem(x.lower()) for x in product_name_tokens]
+    product_name = ' '.join(product_name_tokens)
     return product_name
 
 # Directory for product data
