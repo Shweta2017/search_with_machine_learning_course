@@ -6,9 +6,23 @@ import os
 import random
 import xml.etree.ElementTree as ET
 from pathlib import Path
+#from nltk.stem import PorterStemmer
+import unicodedata
+from nltk.stem.snowball import SnowballStemmer
+
+#ps = PorterStemmer()
+snow_stemmer = SnowballStemmer(language='english')
 
 def transform_name(product_name):
-    # IMPLEMENT
+    #strip accent
+    product_name = ''.join(c for c in unicodedata.normalize('NFD', product_name) if unicodedata.category(c) != 'Mn')
+    #remove non-alphanumeric
+    product_name = ''.join(ch if ch.isalnum() else ' ' for ch in product_name)
+    #remove additional space
+    product_name_tokens = product_name.split()
+    #lowercase and stemming
+    product_name_tokens = [snow_stemmer.stem(x.lower()) for x in product_name_tokens]
+    product_name = ' '.join(product_name_tokens)
     return product_name
 
 # Directory for product data
