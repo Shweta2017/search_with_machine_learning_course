@@ -50,7 +50,7 @@ def create_prior_queries(doc_ids, doc_id_weights,
 
 
 # Hardcoded query here.  Better to use search templates or other query config.
-def create_query(user_query, click_prior_query, filters, sort="_score", sortDir="desc", size=10, source=None):
+def create_query(user_query, click_prior_query, filters, sort="_score", sortDir="desc", size=10, source=None, boosts=None):
     query_obj = {
         'size': size,
         "sort": [
@@ -162,7 +162,8 @@ def create_query(user_query, click_prior_query, filters, sort="_score", sortDir=
                         "script_score": {
                             "script": "0.0001"
                         }
-                    }
+                    },
+                    boosts
                 ]
 
             }
@@ -190,22 +191,31 @@ def create_query(user_query, click_prior_query, filters, sort="_score", sortDir=
 def search(client, user_query, index="bbuy_products", sort="_score", sortDir="desc"):
     #### W3: classify the query
     model = fasttext.load_model("query_classifier_10000_tuned.bin")
-    category, prob = model.predict(user_query)
-    category = category[0].replace("__label__", "")
-    prob = prob[0]
-    threshold = 0.5
-    filters = None
-    if prob >= threshold:
-        filters = [
-            {"terms": {
-            "categoryPathIds.keyword": [category]
-            }}
-        ]
-
+    candidate_count = 5
+    category, prob = model.predict(user_query, k=candidate_count)
+    
     #### W3: create filters and boosts
+    threshold = 0.5
+    sum_prob = 0
+    boosts = None
+    cat_list = []
+    i = 0
+    while True:
+        if sum_prob >= threshold or i >= candidate_count:
+            break
+        prob_curr = prob[i]
+        cat_curr = category[i].replace("__label__", "")
+        cat_list.append(cat_curr)
+        sum_prob = sum_prob + prob_curr
+        i = i + 1
+    if cat_list and sum_prob >= threshold:
+        boosts = {"filter": {"terms": {"categoryPathIds.keyword": cat_list}}, "weight": 100000000}
+        
     # Note: you may also want to modify the `create_query` method above
-    query_obj = create_query(user_query, click_prior_query=None, filters=filters, sort=sort, sortDir=sortDir, source=["name", "shortDescription"])
+    query_obj = create_query(user_query, click_prior_query=None, filters=None, sort=sort, sortDir=sortDir, source=["name", "shortDescription"], boosts=boosts)
     logging.info(query_obj)
+    # print(query_obj)
+    # print(index)
     response = client.search(query_obj, index=index)
     if response and response['hits']['hits'] and len(response['hits']['hits']) > 0:
         hits = response['hits']['hits']
