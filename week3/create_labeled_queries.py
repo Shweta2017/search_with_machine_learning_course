@@ -4,6 +4,8 @@ import xml.etree.ElementTree as ET
 import pandas as pd
 import numpy as np
 import csv
+import unicodedata
+from nltk.stem.snowball import SnowballStemmer
 
 # Useful if you want to perform stemming.
 import nltk
@@ -49,8 +51,43 @@ df = pd.read_csv(queries_file_name)[['category', 'query']]
 df = df[df['category'].isin(categories)]
 
 # IMPLEMENT ME: Convert queries to lowercase, and optionally implement other normalization, like stemming.
+snow_stemmer = SnowballStemmer(language='english')
+def transform_name(product_name):
+    product_name = ''.join(c for c in unicodedata.normalize('NFD', product_name) if unicodedata.category(c) != 'Mn')
+    product_name = ''.join(ch if ch.isalnum() else ' ' for ch in product_name)
+    product_name_tokens = product_name.split()
+    product_name_tokens = [snow_stemmer.stem(x.lower()) for x in product_name_tokens]
+    product_name = ' '.join(product_name_tokens)
+    return product_name
 
+df['query'] = df['query'].apply(lambda x: transform_name(x))
 # IMPLEMENT ME: Roll up categories to ancestors to satisfy the minimum number of queries per category.
+parent_list = [root_category_id]
+level = 1
+parents_df['level'] = 0
+while True:
+    affected_df = parents_df[parents_df.parent.isin(parent_list)]
+    if affected_df.empty:
+        break
+    parents_df['level'] = parents_df.apply(lambda x: level if x['parent'] in parent_list else x['level'], axis=1)
+    level = level + 1
+    parent_list = affected_df.category.to_list()
+
+
+while True:
+    category_df = df.groupby('category')['query'].count().reset_index(name='frequency')
+    categories_below_threshold = category_df[category_df.frequency < min_queries]
+    if categories_below_threshold.empty:
+        print("1. Distinct category", category_df.shape[0])
+        break
+    categories_below_threshold = pd.merge(categories_below_threshold, parents_df, on='category')
+    max_level = categories_below_threshold.level.max()
+    if max_level == 1:
+        print("2. Distinct category", category_df.shape[0])
+        break
+    pruning_candidate_list = categories_below_threshold[categories_below_threshold.level == max_level].category.to_list()
+    df['category'] = df['category'].apply(
+        lambda x: parents_df.loc[parents_df.category == x]['parent'].iloc[0] if x in pruning_candidate_list else x)
 
 # Create labels in fastText format.
 df['label'] = '__label__' + df['category']
