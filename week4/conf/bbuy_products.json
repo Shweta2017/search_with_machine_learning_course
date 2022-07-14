@@ -9,7 +9,8 @@
             "smarter_hyphens_filter",
             "lowercase"
           ]
-        },
+        }
+      },
       "tokenizer": {
         "smarter_hyphens_tokenizer": {
           "type": "char_group",
@@ -154,6 +155,19 @@
       },
       "digital": {
         "type": "boolean"
+      },
+      "embedding": {
+        "type": "knn_vector",
+        "dimension": 384,
+        "method": {
+          "name": "hnsw",
+          "space_type": "cosinesimil",
+          "engine": "nmslib",
+          "parameters": {
+            "ef_construction": 128,
+            "m": 24
+          }
+        }
       },
       "features": {
         "type": "text",

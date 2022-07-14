@@ -11,11 +11,14 @@ from urllib.parse import urljoin
 import pandas as pd
 import fileinput
 import logging
+from sentence_transformers import SentenceTransformer
 
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logging.basicConfig(format='%(levelname)s:%(message)s')
+
+model = SentenceTransformer('all-MiniLM-L6-v2')
 
 # expects clicks and impressions to be in the row
 def create_prior_queries_from_group(
@@ -186,11 +189,31 @@ def create_query(user_query, click_prior_query, filters, sort="_score", sortDir=
     return query_obj
 
 
-def search(client, user_query, index="bbuy_products", sort="_score", sortDir="desc"):
+def create_vector_query(user_query, size=10, source=["name", "shortDescription"]):
+    query_vector = model.encode([user_query])[0]
+    query_obj = {
+        "size": size,
+        "_source": source,
+        "query": {
+            "knn": {
+                "embedding": {
+                    "vector": query_vector,
+                    "k": size
+                }
+            }
+        }
+    }
+    return query_obj
+
+
+def search(client, user_query, index="bbuy_products", sort="_score", sortDir="desc", vector_search=False):
     #### W3: classify the query
     #### W3: create filters and boosts
     # Note: you may also want to modify the `create_query` method above
-    query_obj = create_query(user_query, click_prior_query=None, filters=None, sort=sort, sortDir=sortDir, source=["name", "shortDescription"])
+    if vector_search:
+        query_obj = create_vector_query(user_query)
+    else:
+        query_obj = create_query(user_query, click_prior_query=None, filters=None, sort=sort, sortDir=sortDir, source=["name", "shortDescription"])
     logging.info(query_obj)
     response = client.search(query_obj, index=index)
     if response and response['hits']['hits'] and len(response['hits']['hits']) > 0:
@@ -210,6 +233,8 @@ if __name__ == "__main__":
                          help='The OpenSearch host name')
     general.add_argument("-p", '--port', type=int, default=9200,
                          help='The OpenSearch port')
+    general.add_argument("--vector_search", action="store_true",
+                         help='Use synonyms Filter')
     general.add_argument('--user',
                          help='The OpenSearch admin.  If this is set, the program will prompt for password too. If not set, use default of admin/admin')
 
@@ -241,11 +266,11 @@ if __name__ == "__main__":
     index_name = args.index
     query_prompt = "\nEnter your query (type 'Exit' to exit or hit ctrl-c):"
     print(query_prompt)
-    for line in fileinput.input():
-        query = line.rstrip()
+    while True:
+        query = input()
         if query == "Exit":
             break
-        search(client=opensearch, user_query=query, index=index_name)
+        search(client=opensearch, user_query=query, index=index_name, vector_search=args.vector_search)
 
         print(query_prompt)
 
